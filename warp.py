@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage.transform import PiecewiseAffineTransform, warp
 from skimage import data
-
+from skimage.feature import CENSURE
 
 image = data.astronaut()
 rows, cols = image.shape[0], image.shape[1]

@@ -1,14 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from PIL import Image
 
-from skimage import data
 from skimage.feature import match_template
 
-
-image = data.coins()
-QR1 = image[170:220, 75:130]
-QR2 = image[170:220, 75:130]
-QR3 = image[170:220, 75:130]
+fname="formstograde\\test1.png"
+image = np.array(Image.open(fname).convert("L"))
+coin = np.array(Image.open("QR.png").convert("L"))
 
 result = match_template(image, coin)
 ij = np.unravel_index(np.argmax(result), result.shape)
