@@ -2,18 +2,90 @@ import numpy as np
 from skimage import exposure, img_as_float
 from PIL import Image
 import os
-import time
 import cv2
-from skimage.feature import CENSURE
 from skimage.feature import (match_descriptors, corner_harris,
                              corner_peaks, ORB, plot_matches)
+def rectify(h):
+    h = h.reshape((4,2))
+    hnew = np.zeros((4,2),dtype = np.float32)
+
+    add = h.sum(1)
+    hnew[0] = h[np.argmin(add)]
+    hnew[2] = h[np.argmax(add)]
+
+    diff = np.diff(h,axis = 1)
+    hnew[1] = h[np.argmin(diff)]
+    hnew[3] = h[np.argmax(diff)]
+
+    return hnew
+
+def order_points(pts):
+	# initialzie a list of coordinates that will be ordered
+	# such that the first entry in the list is the top-left,
+	# the second entry is the top-right, the third is the
+	# bottom-right, and the fourth is the bottom-left
+	rect = np.zeros((4, 2), dtype = "float32")
+
+	# the top-left point will have the smallest sum, whereas
+	# the bottom-right point will have the largest sum
+	s = pts.sum(axis = 1)
+	rect[0] = pts[np.argmin(s)]
+	rect[2] = pts[np.argmax(s)]
+
+	# now, compute the difference between the points, the
+	# top-right point will have the smallest difference,
+	# whereas the bottom-left will have the largest difference
+	diff = np.diff(pts, axis = 1)
+	rect[1] = pts[np.argmin(diff)]
+	rect[3] = pts[np.argmax(diff)]
+
+	# return the ordered coordinates
+	return rect
+def process_image(img):
+	blurred = cv2.GaussianBlur(np.array(img), (5, 5), 0)
+	#blurred = cv2.medianBlur(gray, 5)
+
+	# apply Canny Edge Detection
+	edged = cv2.Canny(blurred, 0, 50)
+	orig_edged = edged.copy()
+
+	# find the contours in the edged image, keeping only the
+	# largest ones, and initialize the screen contour
+	(contours, _) = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+	contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
 
-def process_image(img1,img2):
+	# get approximate contour
+	for c in contours:
+		p = cv2.arcLength(c, True)
+		approx = cv2.approxPolyDP(c, 0.02 * p, True)
+
+		if len(approx) == 4:
+			target = approx
+			break
+
+
+	# mapping target points to 500x647 quadrilateral
+	approx = rectify(target)
+	w= int(2328 / 5.0)
+	h= int(3024 / 5.0)
+	pts2 = np.float32([[0,0],[w,0],[w,h],[0,h]])
+
+	M = cv2.getPerspectiveTransform(approx,pts2)
+	dst = cv2.warpPerspective(np.array(img),M,(w,h))
+	return Image.fromarray(dst).convert("L")
+
 	
-	#get face images
-	fname="formstograde\\test1.png"
-	img1 = np.array(img1))
+def process_image2(img1,img2):
+	
+	#get the reference image
+	
+	img1 = img1.convert("L").resize( [int(.50 * s) for s in img1.size], Image.ANTIALIAS )
+	img2 = img2.convert("L").resize( [int(.50 * s) for s in img2.size], Image.ANTIALIAS )
+	#.resize((500,647), Image.ANTIALIAS)
+	#img2 = img2.convert("L").resize((1,647), Image.ANTIALIAS)
+	
+	img1 = np.array(img1)
 
 
 	img2 = np.array(img2)
@@ -30,15 +102,10 @@ def process_image(img1,img2):
 	matches12 = match_descriptors(descriptors1, descriptors2, cross_check=True)
 	idx1 = np.array(matches12)[:,0]
 	idx2 = np.array(matches12)[:,1]
-	#detector = CENSURE()
 
-	#detector.detect(img1)
-	#reference_landmarks = detector.keypoints[:100]  
-	
-	#detector = CENSURE()
-	#detector.detect(img2)
-	#landmarks = detector.keypoints[:100]  
-	
+	#tf=AffineTransform()
+	#tf.estimate(reference_landmarks[idx1],landmarks[idx2])
+	#warped_img = warp(img2,tf)
 	#feed the landmarks to a procrustes analysis to match a template face landmarks
 	transformation = transformation_from_points(reference_landmarks[idx1],landmarks[idx2])
 	
@@ -60,13 +127,15 @@ def process_image(img1,img2):
 	
 	#save the aligned face image
 	isolated = projected_image.crop((np.int(np.min(y))+1, np.int(np.min(x))+1, np.int(np.max(y))-1, np.int(np.max(x))-1))
-	return cropscale(isolated,img2.shape)
+	resized = isolated.resize((500,647), Image.ANTIALIAS)
+	return resized
+	
 def cropscale(im,(height,width)):
 
 	aspect = width / float(height)
 
-	ideal_width =588
-	ideal_height = 804
+	ideal_width =500
+	ideal_height = 647
 
 	ideal_aspect = ideal_width / float(ideal_height)
 
