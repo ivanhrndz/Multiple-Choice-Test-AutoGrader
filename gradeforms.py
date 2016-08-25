@@ -10,7 +10,6 @@ from get_marks import score,questionscorrect,grade,raw
 aligned_forms=[]
 from collections import defaultdict
 grades = defaultdict(dict)
-import matplotlib.pyplot as plt
 def process_forms():
 	forms = glob.glob("formstograde\\*.png")
 	key = glob.glob("key\\*.png")[0]
@@ -48,7 +47,7 @@ def make_detailed_report(grades,fname="graded_detailed.csv"):
 			g.write("%s,%s\r\n" % (id,responses))
 
 
-def make_item_report(grades,fname="graded_item.csv"):
+def make_item_report(grades,fname="graded_itemlevel.csv"):
 	with open(fname,"ab") as g:
 		number_questions = len(grades[0])
 		g.write("item,difficulty,discrimination,guessability\r\n")
