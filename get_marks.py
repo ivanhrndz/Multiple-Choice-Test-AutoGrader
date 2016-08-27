@@ -1,12 +1,18 @@
 import numpy as np
-from scipy.stats import gaussian_kde
 from PIL import ImageOps
 from PIL import Image
 import random
+from scipy.ndimage.morphology import grey_dilation
+import string
+
 
 def score(img):
-	img = ImageOps.invert(img)
 
+	img = Image.fromarray(grey_dilation(np.array(img),(3,3)))
+	img = ImageOps.invert(img)
+	img=np.array(img)
+	img[img > 50] = 255
+	img[img <= 50] = 0
 
 	
 	width = 16
@@ -15,60 +21,44 @@ def score(img):
 	id_number =""
 	for x,y in id_locations:
 		window=np.array(img)[y:y+height,x:x+width]
+		
+		summed_window = (window.sum(axis=1)).round()
+		areas = np.linspace(0,height,11).astype(int)
+		blocks = []
+		for i in range(10):
+			block = summed_window[areas[i]:areas[i+1]]
+			blocks.append(block.sum())
 
-		summed_window = (window.sum(axis=1)/100).round()
-		hist = np.repeat(np.arange(height), summed_window, axis=0)
-		#hist = random.sample(hist, 1000)
-		density = gaussian_kde(hist)
-		max_area = hist[np.argmax(density.evaluate(hist))]
-		if max_area >= ((height*0)/ 11.0) and max_area <= ((height*1)/ 11.0):
-			id_number+="0"
-		elif max_area >= ((height*1)/ 11.0) and max_area <= ((height*2)/ 11.0):
-			id_number+="1"
-		elif max_area >= ((height*2)/ 11.0) and max_area <= ((height*3)/ 11.0):
-			id_number+="2"
-		elif id_number >= ((height*3)/ 11.0) and max_area <= ((height*4)/ 11.0):
-			id_number+="3"
-		elif max_area >= ((height*4)/ 11.0) and max_area <= ((height*5)/ 11.0):
-			id_number+="4"
-		elif max_area >= ((height*5)/ 11.0) and max_area <= ((height*6)/ 11.0):
-			id_number+="5"
-		elif max_area >= ((height*6)/ 11.0) and max_area <= ((height*7)/ 11.0):
-			id_number+="6"
-		elif max_area >= ((height*7)/ 11.0) and max_area <= ((height*8)/ 11.0):
-			id_number+="7"
-		elif max_area >= ((height*8)/ 11.0) and max_area <= ((height*9)/ 11.0):
-			id_number+="8"
-		else: 
-			id_number+="9"
-	print id_number
-	locations = zip([34]*25,np.linspace(212,561,25).round())
-	locations.extend(zip([140]*25,np.linspace(212,561,25).round()))
-	locations.extend(zip([250]*25,np.linspace(212,561,25).round()))
-	locations.extend(zip([366]*25,np.linspace(212,561,25).round()))
+		blocks = np.array(blocks).astype(float)
+		if blocks.max() > 2000:
+			position = np.argmax(blocks)
+			id_number+=str(position)
+
+
+	locations = zip([34]*25,np.linspace(212,561,25).round().astype(int))
+	locations.extend(zip([140]*25,np.linspace(212,561,25).round().astype(int)))
+	locations.extend(zip([250]*25,np.linspace(212,561,25).round().astype(int)))
+	locations.extend(zip([366]*25,np.linspace(212,561,25).round().astype(int)))
 	answers=[]
 	width = 85
 	height = 9
 	p=1
+	
 	for x,y in locations:
 		window=np.array(img)[y:y+height,x:x+width]
-		#window = img[location:location+width,location:location+height]
 		summed_window = (window.sum(axis=0)/100).round()
-		hist = np.repeat(np.arange(width), summed_window, axis=0)
-		#hist = random.sample(hist, 1000)
-		density = gaussian_kde(hist)
-		max_area = hist[np.argmax(density.evaluate(hist))]
-
-		if max_area >= ((width*0)/ 5.0) and max_area <= ((width*1)/ 5.0):
-			answers.append("A")
-		elif max_area >= ((width*1)/ 5.0) and max_area <= ((width*2)/ 5.0):
-			answers.append("B")
-		elif max_area >= ((width*2)/ 5.0) and max_area <= ((width*3)/ 5.0):
-			answers.append("C")
-		elif max_area >= ((width*3)/ 5.0) and max_area <= ((width*4)/ 5.0):
-			answers.append("D")
-		else: 
-			answers.append("E")
+		
+		areas = np.linspace(0,width,6).astype(int)
+		blocks = []
+		for i in range(5):
+			block = summed_window[areas[i]:areas[i+1]]
+			blocks.append(block.sum())
+		blocks = np.array(blocks)
+		if blocks.max() >= 10:
+			position = np.argmax(blocks)
+			answers.append(string.ascii_uppercase[position])
+		else:
+			answers.append("")
 	
 	return (id_number,answers)
 		
