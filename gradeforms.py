@@ -1,72 +1,74 @@
-import numpy as np
-from PIL import ImageOps
+import  glob
 from PIL import Image
-import random
-from scipy.ndimage.morphology import grey_dilation
-import string
+import numpy as np
+from pyirt._pyirt import irt
+from get_marks import score,questionscorrect,grade,raw
+from alignforms import align_image
 
 
-def score(img):
+aligned_forms=[]
+from collections import defaultdict
 
-	img = Image.fromarray(grey_dilation(np.array(img),(3,3)))
-	img = ImageOps.invert(img)
-	img=np.array(img)
-	img[img > 50] = 255
-	img[img <= 50] = 0
 
-	
-	width = 16
-	height = 120
-	id_locations = [(301+(i*18),57) for i in range (8)]
-	id_number =""
-	for x,y in id_locations:
-		window=np.array(img)[y:y+height,x:x+width]
+def process_forms():
+	forms = glob.glob("formstograde\\*.png")
+	key = glob.glob("key\\*.png")[0]
+	key_scored = score(align_image(Image.open(key).convert("L")))[1]
+	n_forms=0.0
+	responses = defaultdict(dict)
+	for fname in forms:
 		
-		summed_window = (window.sum(axis=1)).round()
-		areas = np.linspace(0,height,11).astype(int)
-		blocks = []
-		for i in range(10):
-			block = summed_window[areas[i]:areas[i+1]]
-			blocks.append(block.sum())
+		aligned = align_image(Image.open(fname).convert("L"))
+		id,scored = score(aligned)
+		responses[id] = scored
+		n_forms+=1
 
-		blocks = np.array(blocks).astype(float)
-		if blocks.max() > 2000:
-			position = np.argmax(blocks)
-			id_number+=str(position)
+	transposed = zip(*responses.values())
+
+	for i in range(1,len(transposed)):
+		n_blanks = transposed[-i].count("")
+		if (n_blanks  / n_forms) < .95:
+			break
+
+	#reduced_responses = zip(*zip(*transposed[:-(i)]))
+	reduced_responses = zip(*transposed[:-i+1])
+	responses = dict(zip(responses.keys(),reduced_responses))
+	
+	grades=defaultdict(dict)
+	for id,response in responses.iteritems():
+		grades[id]['responses']=response
+		grades[id]['grade'] = grade(response,key_scored)
+		grades[id]['raw'] = raw(response,key_scored)
+		grades[id]['questionscorrect'] =  questionscorrect(response,key_scored)
+	return grades
+	
+def make_summary_report(grades,fname="graded_summary.csv"):
+	with open(fname,"wb") as g:
+		g.write("id,raw,score\r\n")
+		for id in grades.iterkeys():
+			g.write("%s,%s,%s\r\n" % (id,grades[id]['raw'],grades[id]['grade']))
+	
+def make_detailed_report(grades,fname="graded_detailed.csv"):
+	with open(fname,"wb") as g:
+		number_questions = len(grades.values()[0]['responses'])
+		header = ["Q%s" % i for i in range(1,number_questions+1)]
+		g.write("id,"+",".join(header)+"\r\n")
+		for id in grades.iterkeys():
+			responses = ",".join([str(x) for x in grades[id]['questionscorrect']])
+			g.write("%s,%s\r\n" % (id,responses))
 
 
-	locations = zip([34]*25,np.linspace(212,561,25).round().astype(int))
-	locations.extend(zip([140]*25,np.linspace(212,561,25).round().astype(int)))
-	locations.extend(zip([250]*25,np.linspace(212,561,25).round().astype(int)))
-	locations.extend(zip([366]*25,np.linspace(212,561,25).round().astype(int)))
-	answers=[]
-	width = 85
-	height = 9
-	p=1
-	
-	for x,y in locations:
-		window=np.array(img)[y:y+height,x:x+width]
-		summed_window = (window.sum(axis=0)/100).round()
-		
-		areas = np.linspace(0,width,6).astype(int)
-		blocks = []
-		for i in range(5):
-			block = summed_window[areas[i]:areas[i+1]]
-			blocks.append(block.sum())
-		blocks = np.array(blocks)
-		if blocks.max() >= 10:
-			position = np.argmax(blocks)
-			answers.append(string.ascii_uppercase[position])
-		else:
-			answers.append("")
-	
-	return (id_number,answers)
-		
-def questionscorrect(form,key):
-	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8)
-	
-def grade(form,key):
-	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8).mean()*100
-	
-def raw(form,key):
-	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8).sum()	
+def make_item_report(grades,fname="graded_item.csv"):
+	with open(fname,"wb") as g:
+		number_questions = len(grades.values()[0]['responses'])
+		g.write("item,difficulty,discrimination\r\n")
+		response_list=[]
+		for id in grades.iterkeys():
+			for item in range(len(grades[id]['questionscorrect'])):
+				response_list.append((id,item,grades[id]['questionscorrect'][item]))
+			item_param,user_param = irt(response_list)
+		i=1
+		for item,parameter in item_param.iteritems():
+			g.write("Q%s,%s,%s\r\n" % (i,parameter['alpha'],parameter['beta']))
+			i+=1
+
