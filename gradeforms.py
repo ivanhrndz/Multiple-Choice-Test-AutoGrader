@@ -1,64 +1,72 @@
-import  glob
-from PIL import Image
 import numpy as np
-from pyirt._pyirt import irt
-from alignforms import process_image
-from get_marks import score,questionscorrect,grade,raw
+from PIL import ImageOps
+from PIL import Image
+import random
+from scipy.ndimage.morphology import grey_dilation
+import string
 
 
+def score(img):
 
-aligned_forms=[]
-from collections import defaultdict
-grades = defaultdict(dict)
-def process_forms():
-	forms = glob.glob("formstograde\\*.png")
-	key = glob.glob("key\\*.png")[0]
-	key_scored = score(Image.open(key).convert("L"))[1]
-	for fname in forms:
-		form = Image.open(fname).convert("L").rotate(15,expand=True)
-		#reference_template = Image.open("templates\\template.png").convert("L")
-		aligned = process_image(form)
-		plt.imshow(aligned)
-		plt.show()
-		id,scored = score(aligned)
-		grades[id]['grade'] = grade(scored,key_scored)
-		grades[id]['raw'] = raw(scored,key_scored)
-		grades[id]['questionscorrect'] =  questionscorrect(scored,key_scored)
-	return grades
+	img = Image.fromarray(grey_dilation(np.array(img),(3,3)))
+	img = ImageOps.invert(img)
+	img=np.array(img)
+	img[img > 50] = 255
+	img[img <= 50] = 0
+
 	
-def make_summary_report(grades,fname="graded_summary.csv"):
-	with open(fname,"ab") as g:
-		g.write("id,score\r\n")
-	for id in grades.iterkeys():
-		responses = form['responses']
-		raw = np.sum(responses)
-		percentage = np.mean(responses)
-		with open(fname,"ab") as g:
-			g.write("%s,%s,%s\r\n") % (id,grades[id]['raw'],grades[id]['grade'])
+	width = 16
+	height = 120
+	id_locations = [(301+(i*18),57) for i in range (8)]
+	id_number =""
+	for x,y in id_locations:
+		window=np.array(img)[y:y+height,x:x+width]
+		
+		summed_window = (window.sum(axis=1)).round()
+		areas = np.linspace(0,height,11).astype(int)
+		blocks = []
+		for i in range(10):
+			block = summed_window[areas[i]:areas[i+1]]
+			blocks.append(block.sum())
+
+		blocks = np.array(blocks).astype(float)
+		if blocks.max() > 2000:
+			position = np.argmax(blocks)
+			id_number+=str(position)
+
+
+	locations = zip([34]*25,np.linspace(212,561,25).round().astype(int))
+	locations.extend(zip([140]*25,np.linspace(212,561,25).round().astype(int)))
+	locations.extend(zip([250]*25,np.linspace(212,561,25).round().astype(int)))
+	locations.extend(zip([366]*25,np.linspace(212,561,25).round().astype(int)))
+	answers=[]
+	width = 85
+	height = 9
+	p=1
 	
-def make_detailed_report(grades,fname="graded_detailed.csv"):
-	with open(fname,"ab") as g:
-		number_questions = len(grades[0])
-		header = ["Q%s" % i for i in range(1,len(grades[0]))+1]
-		g.write("id,"+",".join(header)+"\r\n")
-	for id in grades.iterkeys():
-		responses = ",".join([str(x) for x in grades[id]['questionscorrect']])
-		with open(fname,"ab") as g:
-			g.write("%s,%s\r\n" % (id,responses))
-
-
-def make_item_report(grades,fname="graded_itemlevel.csv"):
-	with open(fname,"ab") as g:
-		number_questions = len(grades[0])
-		g.write("item,difficulty,discrimination,guessability\r\n")
-	response_list=[]
-	for id in grades.iterkeys():
-		for item in range(len(grades[id]['questionscorrect'])):
-			response_list.append((id,item,grades[id]['questionscorrect'][item]))
-		item_param,user_param = irt(response_list)
-	i=1
-	for item in item_param:
-		with open(fname,"ab") as g:
-			g.write("Q%s,%s,%s,%s\r\n" % (i,item['difficulty'],item['discrimination'],item['guessability']))
-		i+=1
-
+	for x,y in locations:
+		window=np.array(img)[y:y+height,x:x+width]
+		summed_window = (window.sum(axis=0)/100).round()
+		
+		areas = np.linspace(0,width,6).astype(int)
+		blocks = []
+		for i in range(5):
+			block = summed_window[areas[i]:areas[i+1]]
+			blocks.append(block.sum())
+		blocks = np.array(blocks)
+		if blocks.max() >= 10:
+			position = np.argmax(blocks)
+			answers.append(string.ascii_uppercase[position])
+		else:
+			answers.append("")
+	
+	return (id_number,answers)
+		
+def questionscorrect(form,key):
+	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8)
+	
+def grade(form,key):
+	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8).mean()*100
+	
+def raw(form,key):
+	return np.array([form[i] == key[i] for i in range(len(form))],dtype=np.uint8).sum()	
