@@ -33,7 +33,6 @@ class IRT_MMLE_2PL(object):
             # if the src is list of tuples
             uids, eids, atags = self._loadFromTuples(src)
         # process it
-        print('Data loading is complete.')
 
         self.data_ref = loader.data_storage()
         self.data_ref.setup(uids, eids, atags)
@@ -86,11 +85,9 @@ class IRT_MMLE_2PL(object):
             # add in time block
             start_time = time.time()
             self._exp_step()
-            print("--- E step: %f secs ---" % np.round((time.time() - start_time)))
 
             start_time = time.time()
             self._max_step()
-            print("--- M step: %f secs ---" % np.round((time.time() - start_time)))
 
             self.__calc_theta()
 
@@ -102,17 +99,14 @@ class IRT_MMLE_2PL(object):
             # the goal is to maximize the "average" probability
             avg_prob = np.exp(self.__calc_data_likelihood() / self.data_ref.num_log)
             self.ell_list.append(avg_prob)
-            print("--- all: %f secs ---" % np.round((time.time() - iter_start_time)))
-            print(avg_prob)
+
 
             # if the algorithm improves, then ell > ell_t0
             if avg_prob_t0 > avg_prob:
                 # TODO: needs to roll back if the likelihood decrease
-                print('Likelihood descrease, stops at iteration %d.' % num_iter)
                 break
 
             if avg_prob_t0 < avg_prob and avg_prob - avg_prob_t0 <= self.tol:
-                print('EM converged at iteration %d.' % num_iter)
                 break
             # update the stop condition
             avg_prob_t0 = avg_prob
@@ -407,4 +401,5 @@ class IRT_MMLE_2PL(object):
                     # update c
                     # cap at 0.5
                     self.item_param_dict[eid]['c'] = min(right_cnt/num_guesser, 0.5)
-    '''
+	'''
+
