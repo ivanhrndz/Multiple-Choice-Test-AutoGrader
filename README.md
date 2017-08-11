@@ -1,1 +1,1 @@
-# AutoGrader (An Open Source Alternative to Scantron)
+# Multiple Choice Test AutoGrader (An Open Source Alternative to Scantron)
